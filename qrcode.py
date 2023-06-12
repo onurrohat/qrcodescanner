@@ -2,18 +2,31 @@ import cv2
 import numpy as np
 from pyzbar.pyzbar import decode
 import pandas as pd
-from openpyxl import Workbook
+#from openpyxl import Workbook
 import os
-from firebase import firebase
+#from firebase import firebase
 import json
-import imutils 
+#import imutils
 from datetime import date
 from datetime import datetime
+from smtplib import SMTP
 
-fb_app = firebase.FirebaseApplication('https://mec427inventorymanagement-default-rtdb.europe-west1.firebasedatabase.app/',None)
+#fb_app = firebase.FirebaseApplication('https://mec427inventorymanagement-default-rtdb.europe-west1.firebasedatabase.app/',None)
+
+subject="WARNUNG Für İhr Lager !"
+
+mymail="onuroktayr@gmail.com"
+password="khamcatdauvqcrpz"
+
+sendTo="e180501030@stud.tau.edu.tr"
+mail = SMTP("smtp.gmail.com",587,timeout=10)
+mail.ehlo()
+mail.starttls()
+mail.login(mymail, password)
 
 
-cap = cv2.VideoCapture(1,cv2.CAP_DSHOW)
+
+cap = cv2.VideoCapture(0,cv2.CAP_DSHOW)
 
 cap.set(3,640)
 cap.set(4,480)
@@ -21,14 +34,22 @@ font = cv2.FONT_HERSHEY_COMPLEX
 outputlist = []
         
 
-df = pd.read_excel(r'C:\Python311\qrcodescanner\validation.xlsx')
+df = pd.read_excel(r'C:\Users\z004ca6a\qrcodescanner\validation.xlsx')
 
 today = date.today()
 
 day=today.strftime("%Y-%m-%d")
 
+#print(day)
 
-print(day)
+def extract_order_date(myData):
+            
+    start_index = myData.find("Order Date:")  # "Order Date:" nin index değerini bulur.
+    date_string = myData[start_index + len("Order Date:") : start_index + len("Order Date:") + 10]  # tarih bilgisini string olarak alır.
+    return date_string
+
+
+
 
 while True:
     
@@ -89,19 +110,10 @@ while True:
                 else :
                     location = "lower right"
                     break
-     
-  
-            if center[0] < 320 and center[1] > 240 and "Sensitive" in myData  :
-
-                print( "Info for ", myData, "WARNING !!! Sensitive product is located in the upper left part !!")
-
-            elif center[0] > 320 and center[1] > 240 and "Sensitive" in myData  :
-
-                print( "Info for ", myData, "WARNING !!! Sensitive product is located in the upper right part !!")  
-                break
 
             # Split MyData For Getting Some Spesific Info
-
+           
+            order_date = extract_order_date(myData)
             
             start = "Serial Number:"
             end=" Order Date"
@@ -109,13 +121,9 @@ while True:
             
             p_serialnumber=myData.split(start)[1].split(end)[0]
 
-            #print(p_serialnumber)
-            
-
-            orddate= myData.split("Order Date:")
-
+           
         
-            p_date = datetime.strptime(orddate[-1],"%d-%m-%Y").date()
+            p_date = datetime.strptime(order_date,"%d-%m-%Y").date()
         
         
             difference = p_date - today # calculation of left times for order
@@ -125,15 +133,39 @@ while True:
             int_dif=int(dif_in_day)
 
             dif=int_dif/86400000000
-            
-           
-            
-            if dif < 8 :
-                ShortTime = "It's almost time to order, place the products towards the exit" 
-                print(ShortTime + " for the "  + p_serialnumber +"  located in "+ location )
-            else :
-                break 
-        
+            #print(dif)
+                    
+            if myData not in outputlist :
+                if center[0] < 320 and center[1] > 240 and "Sensitive" in myData  :
+                    outputlist.append(myData)
+
+                    print( "Info for ", myData, "Ihr Produkt ist sensitiv, bitte stellen Sie es in ein sicheres Regal.")
+                    message ="Info für ", myData, "Ihr Produkt ist sensitiv, bitte stellen Sie es in ein sicheres Regal. "
+                    content = "Subject: {0} \n\n {1}".format(subject,message)
+                    mail.sendmail(mymail, sendTo, content.encode("utf-8"))
+                    if   dif < 8 :
+                        ShortTime = "Der Liefertermin des Produkts",p_serialnumber," naht, stellen Sie es auf das Regal am Ausgang" 
+                        content = "Subject: {0} \n\n {1}".format(subject,ShortTime)
+                        mail.sendmail(mymail, sendTo, content.encode("utf-8"))
+                    
+                
+
+                elif center[0] > 320 and center[1] > 240 and "Sensitive" in myData  :
+                    outputlist.append(myData)
+
+                    print( "Info for ", myData, "Ihr Produkt ist sensitiv, bitte stellen Sie es in ein sicheres Regal.")  
+                    message = "Info for ", myData, "Ihr Produkt ist sensitiv, bitte stellen Sie es in ein sicheres Regal."
+                    content = "Subject: {0} \n\n {1}".format(subject,message)
+                    mail.sendmail(mymail, sendTo, content.encode("utf-8"))
+                    if   dif < 8 :
+                        ShortTime = "Der Liefertermin des Produkts",p_serialnumber," naht, stellen Sie es auf das Regal am Ausgang" 
+                        content = "Subject: {0} \n\n {1}".format(subject,ShortTime)
+                        mail.sendmail(mymail, sendTo, content.encode("utf-8"))
+                    
+                
+                    break
+                break
+
 
 
             #Messages On Stream
@@ -143,7 +175,7 @@ while True:
         
 
             # Add new Output to list and delete duplicates
-            outputlist.append(myData)
+            
             outputlist=list(dict.fromkeys(outputlist)) #delete duplicates from a list
             json_output = json.dumps(outputlist)
             #print(json_output)
@@ -155,8 +187,8 @@ while True:
 
 
             #Firebase Connection
-            send_to_firebase = fb_app.patch("https://mec427inventorymanagement-default-rtdb.europe-west1.firebasedatabase.app/",{"/QR Code/Outputs" : json_output})
-            send_to_firebase_totalnum = fb_app.patch("https://mec427inventorymanagement-default-rtdb.europe-west1.firebasedatabase.app/",{"/QR Code/Total Number ":json_totalnum})
+           # send_to_firebase = fb_app.patch("https://mec427inventorymanagement-default-rtdb.europe-west1.firebasedatabase.app/",{"/QR Code/Outputs" : json_output})
+            #send_to_firebase_totalnum = fb_app.patch("https://mec427inventorymanagement-default-rtdb.europe-west1.firebasedatabase.app/",{"/QR Code/Total Number ":json_totalnum})
         
         
 
