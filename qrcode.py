@@ -15,10 +15,10 @@ from smtplib import SMTP
 
 subject="WARNUNG Für İhr Lager !"
 
-mymail="onuroktayr@gmail.com"
-password="khamcatdauvqcrpz"
+mymail="******r@gmail.com"
+password="*****"
 
-sendTo="e180501030@stud.tau.edu.tr"
+sendTo="****@gmail.com"
 mail = SMTP("smtp.gmail.com",587,timeout=10)
 mail.ehlo()
 mail.starttls()
